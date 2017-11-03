@@ -1,6 +1,7 @@
 import skygear
 from skygear.container import SkygearContainer
 from skygear.options import options as skyoptions
+from skygear.utils import db
 
 from .field import Field
 from .schema import Schema, SchemaHelper
@@ -19,7 +20,10 @@ def register_initialization_event_handlers(settings):
                 Field('edited_at', 'datetime')]
 
     def _message_schema():
-        fields = _base_message_fields() + [Field('deleted', 'boolean')]
+        extra_fields = [Field('deleted', 'boolean'),
+                        Field('previous_conversation_message',
+                              'ref(message)')]
+        fields = _base_message_fields() + extra_fields
         return Schema('message', fields)
 
     def _message_history_schema():
@@ -70,3 +74,32 @@ def register_initialization_event_handlers(settings):
                               message_history_schema,
                               receipt_schema],
                              plugin_request=True)
+
+        with db.conn() as conn:
+          populate_message_previous_message(conn)
+
+
+    def populate_message_previous_message(conn):
+      stmt = '''
+UPDATE message m
+SET previous_conversation_message = m1.prev_msg
+FROM (
+    SELECT
+        _id,
+        FIRST_VALUE(_id) OVER w AS prev_msg
+    FROM message
+    WINDOW
+        -- the window only contains messages of the same conversation
+        -- and limited to 1 message only
+        -- with smaller seq than current row
+        w AS
+        (
+          PARTITION BY conversation
+          ORDER BY seq DESC
+          ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING
+        )
+) AS m1
+WHERE m._id = m1._id;
+      '''
+
+      conn.execute(stmt)
