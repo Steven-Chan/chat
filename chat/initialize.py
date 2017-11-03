@@ -77,6 +77,7 @@ def register_initialization_event_handlers(settings):
 
         with db.conn() as conn:
           populate_message_previous_message(conn)
+          install_populate_previous_message_trigger(conn)
 
 
     def populate_message_previous_message(conn):
@@ -103,3 +104,42 @@ WHERE m._id = m1._id;
       '''
 
       conn.execute(stmt)
+
+
+    def install_populate_previous_message_trigger(conn):
+        stmt = '''
+CREATE OR REPLACE FUNCTION update_message_previous_conversation_message()
+RETURNS trigger AS $$
+BEGIN
+SET search_path TO app_my_skygear_app, public;
+
+NEW.previous_conversation_message :=
+(
+    SELECT
+        m._id
+    FROM
+    (
+        SELECT
+            _id,
+            conversation,
+            seq
+        FROM message
+        WHERE
+            seq < NEW.seq AND
+            conversation = NEW.conversation
+        ORDER BY seq DESC
+        LIMIT 1
+    ) AS m
+);
+
+RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS insert_message_trigger on "message";
+CREATE TRIGGER insert_message_trigger
+    BEFORE INSERT ON "message"
+    FOR EACH ROW
+    EXECUTE PROCEDURE update_message_previous_conversation_message();
+        '''
+
+        conn.execute(stmt)
