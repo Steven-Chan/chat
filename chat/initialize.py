@@ -76,12 +76,11 @@ def register_initialization_event_handlers(settings):
                              plugin_request=True)
 
         with db.conn() as conn:
-          populate_message_previous_message(conn)
-          install_populate_previous_message_trigger(conn)
-
+            populate_message_previous_message(conn)
+            install_populate_previous_message_trigger(conn)
 
     def populate_message_previous_message(conn):
-      stmt = '''
+        stmt = '''
 UPDATE message m
 SET previous_conversation_message = m1.prev_msg
 FROM (
@@ -101,10 +100,9 @@ FROM (
         )
 ) AS m1
 WHERE m._id = m1._id;
-      '''
+        '''
 
-      conn.execute(stmt)
-
+        conn.execute(stmt)
 
     def install_populate_previous_message_trigger(conn):
         stmt = '''
